@@ -1012,7 +1012,7 @@ $('tChips').onclick=async e=>{
   $('pvMsg').textContent=r.error?'Fehler: '+r.error.message:(m?'Timeout gesetzt: '+b.textContent:'Timeout aufgehoben');
 };
 function openL(k){document.querySelectorAll('.legal').forEach(x=>{x.style.display=x.id=='l-'+k?'block':'none'});$('lg').classList.add('on');$('lg').querySelector('.box').scrollTop=0}
-document.addEventListener('click',e=>{const a=e.target.closest('[data-l]');if(a){e.preventDefault();openL(a.dataset.l)}});
+document.addEventListener('click',e=>{const a=e.target.closest('a[data-l]');if(a){e.preventDefault();openL(a.dataset.l)}});
 $('lgClose').onclick=()=>$('lg').classList.remove('on');
 document.addEventListener('keydown',e=>{if(e.key=='Escape')$('lg').classList.remove('on')});
 if(location.hash.startsWith('#l-'))openL(location.hash.slice(3));
