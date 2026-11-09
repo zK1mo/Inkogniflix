@@ -141,7 +141,12 @@ a.card.lk{display:block;text-decoration:none;color:var(--t);transition:.2s}a.car
 .catt{flex:1;text-align:left;background:none;border:0;color:var(--t);font:800 20px Outfit,system-ui,sans-serif;cursor:pointer;padding:0}
 .catt small{color:var(--m);font-weight:400;font-size:14px}
 .cat.col .posts,.cat.col .cempty,.cat.col .cmore,.cat.col .sheet{display:none}
-input[type=date]{color-scheme:dark}
+input[type=date],input[type=datetime-local]{color-scheme:dark}
+.cdl{color:var(--m);font-size:14px;margin:14px 0 0}
+.cd{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:8px 0 4px}
+.cd .u{min-width:68px;padding:8px 10px;border-radius:14px;background:rgba(0,0,0,.35);border:1px solid var(--line)}
+.cd .u b{display:block;font-size:24px;font-variant-numeric:tabular-nums}
+.cd .u span{font-size:12px;color:var(--m)}
 .sheet{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:14px 16px;margin-bottom:14px}
 .facts{display:flex;flex-wrap:wrap;gap:8px 22px}.facts span{font-weight:600}.facts small{display:block;color:var(--m);font-size:12px;font-weight:400}
 .sheet p{margin:10px 0 0;color:var(--m)}.sheet .btn{margin-top:12px;padding:8px 16px;font-size:14px}
@@ -300,6 +305,7 @@ input[type=date]{color-scheme:dark}
   <h2>Server beitreten</h2>
   <div class="card">
     <p id="srv"><span class="dot chk" id="sdot"></span><span id="stxt">Status wird geprüft …</span></p>
+    <div id="cdBox" style="display:none"><p class="cdl" id="cdL">Der Server läuft noch</p><div class="cd" id="cd"></div></div>
     <div class="ip"><span id="ip">…</span><button class="btn" id="copy">Kopieren</button></div>
     <p class="msg" id="copyMsg"></p>
     <a class="btn ghost" id="mapBtn" href="#" target="_blank" rel="noopener" style="display:none">🗺 Weltkarte öffnen</a>
@@ -367,6 +373,18 @@ input[type=date]{color-scheme:dark}
   <h3 class="mh">Offene Meldungen</h3><div id="repList"></div>
   <h3 class="mh">Aktive Timeouts</h3><div id="toList"></div>
   <h3 class="mh">Gesperrte Nutzer</h3><div id="banList"></div>
+  <h3 class="mh">Server-Einstellungen</h3>
+  <p class="sub" style="font-size:13px;margin-bottom:8px">Adresse, Laufzeit und Zugangsdaten des aktuellen Servers. Bei einem neuen Server passt du hier alles an. Der Spielzeit-Sync nutzt die neuen Zugangsdaten beim nächsten Lauf automatisch.</p>
+  <label style="font-size:12px;color:var(--m)">Server-IP<input type="text" id="cfgIp" maxlength="100" placeholder="zum Beispiel inkogniflix.g-portal.game"></label>
+  <label style="font-size:12px;color:var(--m)">Weltkarte-Link (optional)<input type="text" id="cfgMap" maxlength="300" placeholder="https://…"></label>
+  <label style="font-size:12px;color:var(--m)">Server läuft bis (optional, für den Countdown)<input class="in" type="datetime-local" id="cfgEnd"></label>
+  <p class="sub" style="font-size:13px;margin:14px 0 4px">FTP-Zugang für den Spielzeit-Sync (bei G-Portal im Menü „Status“)</p>
+  <div class="row" style="gap:8px"><input type="text" id="cfgHost" placeholder="FTP-Host" maxlength="255" style="flex:3"><input class="in" type="number" id="cfgPort" placeholder="Port" min="1" max="65535" style="flex:1"></div>
+  <input type="text" id="cfgUser" placeholder="FTP-Benutzer" maxlength="100" autocomplete="off">
+  <input type="password" id="cfgPass" placeholder="FTP-Passwort" maxlength="200" autocomplete="new-password">
+  <input type="text" id="cfgWorld" placeholder="Welt-Ordner (Standard: world)" maxlength="60" autocomplete="off">
+  <label style="font-size:13px;display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" id="cfgSecure"> Verschlüsselt (FTPS)</label>
+  <button class="btn" id="cfgSave">Speichern</button><p class="msg" id="cfgMsg"></p>
   <h3 class="mh">Archiv</h3><p class="sub" style="font-size:13px;margin-bottom:8px">Lade alle Daten oder alle Bilder als Datei auf deinen Computer.</p><div class="row" style="flex-wrap:wrap;gap:8px"><button class="btn ghost" id="exJson">Daten (JSON)</button><button class="btn ghost" id="exZip">Bilder (ZIP)</button></div><p class="msg" id="exMsg"></p>
   <button class="btn ghost" id="amClose" style="width:100%;margin-top:14px">Schließen</button>
 </div></div>
@@ -546,7 +564,8 @@ async function loadConfig(){
     const r=await sb.from('site_config').select('key,value'),c={};
     (r.data||[]).forEach(x=>{c[x.key]=x.value});
     if(c.server_ip){SRV_IP=c.server_ip;$('ip').textContent=SRV_IP;checkSrv()}
-    if(c.map_url&&/^https?:\/\//i.test(c.map_url)){$('mapBtn').style.display='';$('mapBtn').href=c.map_url}
+    startCd(c.server_end||'');
+    if(c.map_url&&/^https?:\/\//i.test(c.map_url)){$('mapBtn').style.display='';$('mapBtn').href=c.map_url}else $('mapBtn').style.display='none';
   }catch(e){}
 }
 $('gBtn').onclick=()=>{if(cur)setUser(cur);else $('authBtn').click()};
@@ -839,7 +858,44 @@ async function loadAdmin(){
   bl.innerHTML=B.length?B.map(x=>'<div class="lbrow" style="grid-template-columns:1fr auto"><b>'+esc(nm[x.user_id]||'Spieler-'+x.user_id.slice(0,4))+'</b><button class="btn ghost" data-a="aun" data-u="'+x.user_id+'">Entsperren</button></div>').join(''):'<p class="sub">Niemand gesperrt.</p>';
   $('toList').innerHTML=TO.length?TO.map(x=>'<div class="lbrow" style="grid-template-columns:1fr auto"><div><b>'+esc(nm[x.user_id]||'Spieler-'+x.user_id.slice(0,4))+'</b><br><small>bis '+fmt(x.ends_at)+'</small></div><button class="btn ghost" data-a="aunt" data-u="'+x.user_id+'">Aufheben</button></div>').join(''):'<p class="sub">Keine aktiven Timeouts.</p>';
 }
-$('adminBtn').onclick=()=>{$('am').classList.add('on');loadAdmin()};
+let CD_T=null;
+function startCd(iso){
+  clearInterval(CD_T);const box=$('cdBox'),end=new Date(iso).getTime();
+  if(!iso||isNaN(end)){box.style.display='none';return}
+  const tick=()=>{
+    const s=Math.floor((end-Date.now())/1000);
+    if(s<=0){$('cdL').textContent='Dieser Server ist abgelaufen';$('cd').innerHTML='';clearInterval(CD_T);return}
+    $('cdL').textContent='Der Server läuft noch';
+    const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60),x=s%60;
+    $('cd').innerHTML=[[d,'Tage'],[h,'Std'],[m,'Min'],[x,'Sek']].map(a=>'<div class="u"><b>'+String(a[0]).padStart(2,'0')+'</b><span>'+a[1]+'</span></div>').join('');
+  };
+  box.style.display='';tick();CD_T=setInterval(tick,1000);
+}
+const toLocalDT=iso=>{const d=new Date(iso);if(!iso||isNaN(d))return '';const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes())};
+async function loadSrvCfg(keepMsg){
+  const m=$('cfgMsg');if(!keepMsg)m.textContent='';
+  const r=await sb.rpc('admin_get_server_settings');
+  if(r.error||!r.data){m.textContent='Server-Einstellungen sind noch nicht eingerichtet. Führe zuerst die SQL-Datei in Supabase aus.';$('cfgSave').disabled=true;return}
+  const c=r.data;$('cfgSave').disabled=false;
+  $('cfgIp').value=c.server_ip||'';$('cfgMap').value=c.map_url||'';$('cfgEnd').value=toLocalDT(c.server_end);
+  $('cfgHost').value=c.ftp_host||'';$('cfgPort').value=c.ftp_port||'';$('cfgUser').value=c.ftp_user||'';$('cfgWorld').value=c.world_dir||'';$('cfgSecure').checked=!!c.ftp_secure;
+  $('cfgPass').value='';$('cfgPass').placeholder=c.ftp_pass_set?'FTP-Passwort (gesetzt, leer lassen = unverändert)':'FTP-Passwort';
+}
+$('cfgSave').onclick=async()=>{
+  const m=$('cfgMsg'),v=id=>$(id).value.trim(),b=$('cfgSave');
+  const ip=v('cfgIp'),map=v('cfgMap'),port=v('cfgPort'),end=v('cfgEnd'),w=v('cfgWorld');
+  if(!ip){m.textContent='Bitte gib die Server-IP ein.';return}
+  if(map&&!/^https?:\/\//i.test(map)){m.textContent='Der Weltkarte-Link muss mit http:// oder https:// beginnen.';return}
+  if(port&&!(Number(port)>=1&&Number(port)<=65535)){m.textContent='Der Port muss eine Zahl zwischen 1 und 65535 sein.';return}
+  if(w&&!/^[A-Za-z0-9_.\/-]+$/.test(w)){m.textContent='Der Welt-Ordner darf nur Buchstaben, Zahlen und _ . - / enthalten.';return}
+  b.disabled=true;m.textContent='Speichere …';
+  const r=await sb.rpc('admin_set_server_settings',{p_ip:ip,p_map:map,p_end:end?new Date(end).toISOString():'',p_host:v('cfgHost'),p_port:port?Number(port):null,p_user:v('cfgUser'),p_pass:$('cfgPass').value,p_secure:$('cfgSecure').checked,p_world:w});
+  b.disabled=false;
+  if(r.error){m.textContent='Fehler: '+r.error.message;return}
+  m.textContent='Gespeichert. Der Spielzeit-Sync nutzt die neuen Zugangsdaten beim nächsten Lauf.';
+  loadSrvCfg(true);loadConfig();
+};
+$('adminBtn').onclick=()=>{$('am').classList.add('on');loadAdmin();loadSrvCfg()};
 $('amClose').onclick=()=>$('am').classList.remove('on');
 $('am').onclick=async e=>{
   const b=e.target.closest('button[data-a]');if(!b)return;
