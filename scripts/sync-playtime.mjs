@@ -6,9 +6,7 @@ import {appendFileSync} from 'node:fs';
 
 const E=process.env;
 const need=k=>{if(!E[k]){console.error('Fehlt: '+k);process.exit(1)}return E[k]};
-const HOST=need('FTP_HOST'),USER=need('FTP_USER'),PASS=need('FTP_PASS');
 const SB=need('SUPABASE_URL').replace(/\/$/,''),KEY=need('SUPABASE_SERVICE_KEY');
-const PORT=Number(E.FTP_PORT||21),WORLD=E.WORLD_DIR||'world',SECURE=E.FTP_SECURE==='true';
 const EXCL=(E.EXCLUDE_NAMES||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
 const TRIES=Number(E.RETRIES||5),DELAY=Number(E.RETRY_DELAY_MS||20000);
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -44,6 +42,18 @@ async function sbFetch(url,opt={}){
   if(!r.ok){const e=new Error(`Supabase ${r.status}: ${t.slice(0,200)}`);e.status=r.status;throw e}
   return t?JSON.parse(t):null;
 }
+
+// Zugangsdaten: zuerst aus Supabase (Admin-Seite der Website), sonst aus den GitHub-Secrets
+let CFG={};
+try{const r=await sbFetch(`${SB}/rest/v1/server_secrets?id=eq.1&select=*`);if(r&&r[0])CFG=r[0]}
+catch(e){console.error('Hinweis: Server-Einstellungen aus Supabase nicht lesbar ('+e.message+'), nutze GitHub-Secrets.')}
+const has=v=>v!==null&&v!==undefined&&String(v).trim()!=='';
+const pick=(a,b)=>has(a)?a:b;
+const HOST=pick(CFG.ftp_host,E.FTP_HOST),USER=pick(CFG.ftp_user,E.FTP_USER),PASS=pick(CFG.ftp_pass,E.FTP_PASS);
+if(!HOST||!USER||!PASS){console.error('Fehlt: FTP-Zugangsdaten (weder auf der Admin-Seite noch als GitHub-Secrets hinterlegt)');process.exit(1)}
+console.log('::add-mask::'+PASS); // Passwort im Protokoll verbergen
+const PORT=Number(pick(CFG.ftp_port,E.FTP_PORT)||21),WORLD=pick(CFG.world_dir,E.WORLD_DIR)||'world';
+const SECURE=has(CFG.ftp_host)?!!CFG.ftp_secure:E.FTP_SECURE==='true';
 
 async function readStats(){
   const client=new Client(60000);
